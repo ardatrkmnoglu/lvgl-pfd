@@ -5,12 +5,13 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #define DEG_TO_RAD(deg) ((deg) * M_PI / 180.0)
 
-#define SCR_WIDTH 1500
-#define SCR_HEIGHT 900
+#define SCR_WIDTH 1600
+#define SCR_HEIGHT 1200
 #define R (SCR_WIDTH + SCR_HEIGHT)
 
 /* tape dimensions */
@@ -39,12 +40,20 @@
 #define POINTER_LEFT_X2(x) ((x) + 5)
 #define POINTER_LEFT_Y2(y) ((y) + (TAPE_HEIGHT / 2) + 2)
 
+/* status */
+#define STATUS_TAXI 0
+#define STATUS_TAKEOFF 1
+#define STATUS_CRUISE 2
+#define STATUS_LANDING 3
+
 /* functions */
 static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll);
+static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll, int ppu);
 static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h);
-static void create_side_tape(int x, int y, lv_layer_t *layer, int tape_loc,
+static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 		      int tape_info, int tape_step, double ppu);
 static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float heading);
+static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, const char *msg3);
 static void pfd_draw(lv_event_t *e);
 
 #endif // PFD_H

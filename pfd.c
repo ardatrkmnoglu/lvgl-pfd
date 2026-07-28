@@ -1,11 +1,17 @@
 #include "include/pfd.h"
+#include <lvgl/font/lv_text.h>
 
-double current_roll = 0.0f;
-double current_pitch = 0.0f;
-double current_acceleration = 0.0f;
-double current_speed = 0.0f;
-double current_altitude = 0.0f;
-double current_heading = 0.0f;
+static double current_roll = 0.0f;
+static double current_pitch = 0.0f;
+static double current_acceleration = 0.0f;
+static double current_speed = 0.0f;
+static double current_altitude = 0.0f;
+static double current_heading = 0.0f;
+static int current_status = 0;
+
+static char *status_msg1 = "FMC SPD";
+static char *status_msg2 = "LNAV";
+static char *status_msg3 = "TAXI";
 
 static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll) {
 	int cx = w / 2;
@@ -84,6 +90,93 @@ static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, f
 #undef ROT_Y
 }
 
+static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll, int ppu) {
+	int cx = w / 2;
+	int cy = h / 2 + (int)pitch;
+
+	double rad = DEG_TO_RAD(roll);
+	float cos_r = cosf(rad);
+	float sin_r = sinf(rad);
+
+#define ROT_X(x, y) (int)((x * cos_r) - (y * sin_r)) + cx
+#define ROT_Y(x, y) (int)((x * sin_r) + (y * cos_r)) + cy
+
+	lv_area_t ladder_clip = {140, 320, w - 140, h - 320};
+	lv_area_t initial_clip = layer->_clip_area;
+	layer->_clip_area = ladder_clip;
+
+	lv_draw_line_dsc_t line_dsc;
+	lv_draw_line_dsc_init(&line_dsc);
+	line_dsc.color = lv_color_hex(0xffffff);
+	line_dsc.width = 3;
+
+	lv_draw_label_dsc_t label_dsc;
+	lv_draw_label_dsc_init(&label_dsc);
+	label_dsc.color = lv_color_hex(0xffffff);
+	label_dsc.font = &lv_font_montserrat_18;
+	label_dsc.align = LV_TEXT_ALIGN_CENTER;
+
+	for (int v = -30; v <= 30; v += 5) {
+		if (v == 0)
+			continue;
+
+		int y_offset = -v * ppu;
+
+		int half_w = (v % 10 == 0) ? 90 : 40;
+
+		line_dsc.p1 = (lv_point_precise_t){ROT_X(-half_w, y_offset),
+						   ROT_Y(-half_w, y_offset)};
+		line_dsc.p2 = (lv_point_precise_t){ROT_X(half_w, y_offset),
+						   ROT_Y(half_w, y_offset)};
+		lv_draw_line(layer, &line_dsc);
+
+		if (v % 10 == 0) {
+			char buf[8];
+			sprintf(buf, "%d", abs(v));
+
+			int tx_L = -half_w - 20;
+			int tx_R = half_w + 20;
+
+			lv_point_precise_t t_pt_L = {ROT_X(tx_L, y_offset),
+						     ROT_Y(tx_L, y_offset)};
+			lv_point_precise_t t_pt_R = {ROT_X(tx_R, y_offset),
+						     ROT_Y(tx_R, y_offset)};
+
+			lv_area_t txt_area_L = {t_pt_L.x - 20, t_pt_L.y - 10,
+						t_pt_L.x + 20, t_pt_L.y + 10};
+			label_dsc.text = buf;
+			lv_draw_label(layer, &label_dsc, &txt_area_L);
+
+			lv_area_t txt_area_R = {t_pt_R.x - 20, t_pt_R.y - 10,
+						t_pt_R.x + 20, t_pt_R.y + 10};
+			lv_draw_label(layer, &label_dsc, &txt_area_R);
+		} else {
+			double quart_down = v - 2.5;
+			double quart_up = v + 2.5;
+
+			double q_offset_d = -quart_down * ppu;
+			double q_offset_u = -quart_up * ppu;
+
+			line_dsc.p1 = (lv_point_precise_t){ROT_X(-20, q_offset_d),
+							   ROT_Y(-20, q_offset_d)};
+			line_dsc.p2 = (lv_point_precise_t){ROT_X(20, q_offset_d),
+							   ROT_Y(20, q_offset_d)};
+			lv_draw_line(layer, &line_dsc);
+
+			line_dsc.p1 = (lv_point_precise_t){ROT_X(-20, q_offset_u),
+							   ROT_Y(-20, q_offset_u)};
+			line_dsc.p2 = (lv_point_precise_t){ROT_X(20, q_offset_u),
+							   ROT_Y(20, q_offset_u)};
+			lv_draw_line(layer, &line_dsc);
+
+		}
+	}
+	layer->_clip_area = initial_clip;
+
+#undef ROT_X
+#undef ROT_Y
+}
+
 static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h) {
 	int mcx = w / 2;
 	int mcy = h / 2;
@@ -91,15 +184,21 @@ static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h) {
 	lv_draw_line_dsc_t aircraft_dsc;
 	lv_draw_line_dsc_init(&aircraft_dsc);
 	aircraft_dsc.color = lv_color_hex(0xffffff);
-	aircraft_dsc.width = 5;
+	aircraft_dsc.width = 8;
 
 	// chevron wings (--)
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx - 60, mcy};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx - 20, mcy};
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx - 120, mcy};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx - 40, mcy};
+	lv_draw_line(layer, &aircraft_dsc);
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx - 40, mcy - (aircraft_dsc.width / 2.0)};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx - 40, mcy + 24};
 	lv_draw_line(layer, &aircraft_dsc);
 
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx + 20, mcy};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx + 60, mcy};
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx + 40, mcy};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx + 120, mcy};
+	lv_draw_line(layer, &aircraft_dsc);
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx + 40, mcy - (aircraft_dsc.width / 2.0)};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx + 40, mcy + 24};
 	lv_draw_line(layer, &aircraft_dsc);
 
 	aircraft_dsc.p1 = (lv_point_precise_t){mcx, mcy - 5};
@@ -107,7 +206,7 @@ static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h) {
 	lv_draw_line(layer, &aircraft_dsc);
 }
 
-static void create_side_tape(int x, int y, lv_layer_t *layer, int tape_loc,
+static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 		      int tape_info, int tape_step, double ppu) {
 	lv_area_t tape_area = {x, y, x + TAPE_WIDTH, y + TAPE_HEIGHT};
 
@@ -139,15 +238,15 @@ static void create_side_tape(int x, int y, lv_layer_t *layer, int tape_loc,
 	switch (tape_info) {
 	case TAPE_INFO_SPEED:
 		current_val = current_speed;
-		diff = 180;
+		diff = SCR_HEIGHT / 5;
 		break;
 	case TAPE_INFO_ALTITUDE:
 		current_val = current_altitude;
-		diff = 700;
+		diff = SCR_HEIGHT;
 		break;
 	case TAPE_INFO_HEADING:
 		current_val = current_heading;
-		diff = 60;
+		diff = SCR_WIDTH / 20;
 		break;
 	case TAPE_INFO_ACCEL:
 		current_val = current_acceleration;
@@ -211,6 +310,32 @@ static void create_side_tape(int x, int y, lv_layer_t *layer, int tape_loc,
 		pointer_area.y2 = POINTER_LEFT_Y2(y);
 	}
 	lv_draw_rect(layer, &pointer_dsc, &pointer_area);
+
+	char buf[8];
+	sprintf(buf, "%.1f", current_val);
+
+	lv_area_t val_area = {tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 15) : (x - 115),
+			      y + (TAPE_HEIGHT / 2) - 30,
+			      tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 105) : (x - 15),
+			      y + (TAPE_HEIGHT / 2) + 30};
+
+	lv_draw_rect_dsc_t val_bg_dsc;
+	lv_draw_rect_dsc_init(&val_bg_dsc);
+	val_bg_dsc.bg_color = lv_color_hex(0x111111);
+	val_bg_dsc.bg_opa = LV_OPA_COVER;
+	val_bg_dsc.radius = 3;
+	lv_draw_rect(layer, &val_bg_dsc, &val_area);
+
+	lv_area_t val_text_area = {tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 15) : (x - 115),
+			      y + (TAPE_HEIGHT / 2) - 15,
+			      tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 105) : (x - 15),
+			      y + (TAPE_HEIGHT / 2) + 15};
+
+	label_dsc.font = &lv_font_montserrat_24;
+	label_dsc.align = LV_TEXT_ALIGN_CENTER;
+	label_dsc.text = buf;
+	lv_draw_label(layer, &label_dsc, &val_text_area);
+
 }
 
 static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float heading) {
@@ -320,6 +445,103 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 	lv_draw_label(layer, &ehdg_label_dsc, &ehdg_text_area);
 }
 
+static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, const char *msg3) {
+	int cx = SCR_WIDTH / 2;
+	char buf1[16];
+	char buf2[16];
+	char buf3[16];
+	sprintf(buf1, "%s", msg1);
+	sprintf(buf2, "%s", msg2);
+	sprintf(buf3, "%s", msg3);
+
+	lv_draw_rect_dsc_t fma_bg_dsc;
+	lv_draw_rect_dsc_init(&fma_bg_dsc);
+	fma_bg_dsc.bg_color = lv_color_hex(0x313131);
+	fma_bg_dsc.bg_opa = LV_OPA_70;
+
+	lv_area_t fma1_area = {cx - 400, 25,
+			       cx - 150, 100};
+	lv_draw_rect(layer, &fma_bg_dsc, &fma1_area);
+
+	lv_area_t fma2_area = {cx - 125, 25,
+			       cx + 125, 100};
+	lv_draw_rect(layer, &fma_bg_dsc, &fma2_area);
+
+	lv_area_t fma3_area = {cx + 150, 25,
+			       cx + 400, 100};
+	lv_draw_rect(layer, &fma_bg_dsc, &fma3_area);
+
+	lv_draw_label_dsc_t fma_label_dsc;
+	lv_draw_label_dsc_init(&fma_label_dsc);
+	fma_label_dsc.color = lv_color_hex(0x00ff00);
+	fma_label_dsc.align = LV_TEXT_ALIGN_CENTER;
+	fma_label_dsc.font = &lv_font_montserrat_28;
+
+	fma_label_dsc.text = msg1;
+	lv_draw_label(layer, &fma_label_dsc, &fma1_area);
+	fma_label_dsc.text = msg2;
+	lv_draw_label(layer, &fma_label_dsc, &fma2_area);
+	fma_label_dsc.text = msg3;
+	lv_draw_label(layer, &fma_label_dsc, &fma3_area);
+
+}
+
+static void input_event(lv_event_t *e) {
+	uint32_t key = lv_event_get_key(e);
+
+	switch (key) {
+		case 'w':
+			current_pitch -= 1.0f;
+			break;
+		case 's':
+			current_pitch += 1.0f;
+			break;
+		case 'a':
+			current_roll += 0.5f;
+			break;
+		case 'd':
+			current_roll -= 0.5f;
+			break;
+
+		case LV_KEY_UP:
+			current_speed += 2.5f;
+			break;
+		case LV_KEY_DOWN:
+			current_speed -= 2.5f;
+			break;
+		case LV_KEY_LEFT:
+			if (current_status == STATUS_TAXI)
+				current_heading -= 2.0f;
+			break;
+		case LV_KEY_RIGHT:
+			if (current_status == STATUS_TAXI)
+				current_heading += 2.0f;
+			break;
+
+		case '1':
+			current_status = STATUS_TAXI;
+			status_msg3 = "TAXI";
+			break;
+		case '2':
+			current_status = STATUS_TAKEOFF;
+			status_msg3 = "TKOFF";
+			break;
+		case '3':
+			current_status = STATUS_CRUISE;
+			status_msg3 = "CRUISE";
+			break;
+		case '4':
+			current_status = STATUS_LANDING;
+			status_msg3 = "LND";
+			break;
+	}
+
+	if (current_speed < 0) current_speed = 0;
+
+	if (current_roll < -45.0f) current_roll = -45.0f;
+	if(current_roll > 45.0f) current_roll = 45.0f;
+}
+
 static void pfd_draw(lv_event_t *e) {
 	lv_obj_t *obj = lv_event_get_target(e);
 	lv_layer_t *layer = lv_event_get_layer(e);
@@ -329,13 +551,18 @@ static void pfd_draw(lv_event_t *e) {
 
 	draw_horizon(layer, w, h, current_pitch, current_roll);
 
+	draw_pitch_ladder(layer, w, h, current_pitch, current_roll, 12);
+
 	create_heading_tape(layer, w, h, current_heading);
 
-	create_side_tape(20, (lv_obj_get_height(obj) - TAPE_HEIGHT) / 2, layer,
-			 TAPE_LOC_LEFT, TAPE_INFO_SPEED, 10, 2);
-	create_side_tape(lv_obj_get_width(obj) - TAPE_WIDTH - 20,
-			 (lv_obj_get_height(obj) - TAPE_HEIGHT) / 2, layer,
+	create_side_tape(layer, 20,
+			 (lv_obj_get_height(obj) - TAPE_HEIGHT) / 2,
+			 TAPE_LOC_LEFT, TAPE_INFO_SPEED, 20, 2);
+	create_side_tape(layer, lv_obj_get_width(obj) - TAPE_WIDTH - 20,
+			 (lv_obj_get_height(obj) - TAPE_HEIGHT) / 2,
 			 TAPE_LOC_RIGHT, TAPE_INFO_ALTITUDE, 100, 0.5);
+
+	print_fma(layer, status_msg1, status_msg2, status_msg3);
 
 	draw_chevron(layer, w, h);
 }
@@ -345,40 +572,45 @@ int main() {
 
 	lv_display_t *dpy = lv_sdl_window_create(SCR_WIDTH, SCR_HEIGHT);
 
-	lv_obj_t *pfd_screen = lv_obj_create(lv_screen_active());
-	lv_obj_set_size(pfd_screen, SCR_WIDTH, SCR_HEIGHT);
-	lv_obj_center(pfd_screen);
+	lv_indev_t *kb = lv_sdl_keyboard_create();
 
-	lv_obj_set_style_bg_color(pfd_screen, lv_color_hex(0x000000), 0);
-	lv_obj_set_style_border_width(pfd_screen, 0, 0);
-	lv_obj_set_style_radius(pfd_screen, 0, 0);
+	lv_group_t *g = lv_group_create();
+	lv_group_set_default(g);
+	lv_indev_set_group(kb, g);
 
-	lv_obj_add_event_cb(pfd_screen, pfd_draw, LV_EVENT_DRAW_MAIN, NULL);
+	lv_obj_t *screen = lv_obj_create(lv_screen_active());
+	lv_obj_set_size(screen, SCR_WIDTH, SCR_HEIGHT);
+	lv_obj_center(screen);
 
-	// initial mock data for simulation
+	lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+	lv_obj_set_style_border_width(screen, 0, 0);
+	lv_obj_set_style_radius(screen, 0, 0);
+
+	lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+	lv_group_add_obj(g, screen);
+
+	lv_obj_add_event_cb(screen, pfd_draw, LV_EVENT_DRAW_MAIN, NULL);
+	lv_obj_add_event_cb(screen, input_event, LV_EVENT_KEY, NULL);
+
+	// initial data
 	current_roll = 0.0;
 	current_pitch = 0.0;
-	current_speed = 512.5;
-	current_altitude = 10150.0;
-	current_heading = 274.0;
-	current_acceleration = 50;
+	current_speed = 0.0;
+	current_altitude = 75.5;
+	current_heading = 0.0;
 
 	// pfd simulation
 	while (1) {
-		static double t = 0;
-		t += 0.05f;
-		current_acceleration = 50 - (5 * t);
+		float turn_rate = current_roll * 0.05f;
+		current_heading -= turn_rate;
+		if(current_heading >= 360.0f) current_heading -= 360.0f;
+		if(current_heading < 0.0f) current_heading += 360.0f;
 
-		if (t > 10)
-			current_acceleration = -0.25;
-		if (current_speed < 0)
-			current_speed = 0;
-		current_roll = sinf(t) * 30.0f; // roll: -30 ~ +30°
-		current_pitch = cosf(t) * 40.0f; // pitch: -40 ~ +40 px
-		current_speed += current_acceleration; // speed: 512.5 + (50*t - 5*t^2) km/h
-		current_altitude += 0.1 * current_pitch;
-		current_heading += sinf(t) * 2;
-		lv_obj_invalidate(pfd_screen);
+		float climb_rate = (current_pitch * 0.1f) * (current_speed / 200.0f);
+		current_altitude += climb_rate;
+		if (current_altitude < 0) current_altitude = 0;
+
+		lv_obj_invalidate(screen);
 		lv_timer_handler();
 		usleep(20000);
 	}
