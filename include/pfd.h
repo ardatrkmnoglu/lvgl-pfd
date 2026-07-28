@@ -53,6 +53,7 @@ static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h);
 static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 		      int tape_info, int tape_step, double ppu);
 static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float heading);
+static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float roll);
 static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, const char *msg3);
 static void pfd_draw(lv_event_t *e);
 
