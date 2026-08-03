@@ -1,9 +1,8 @@
 #include "include/pfd.h"
 
-lv_font_t *font_b612_20 = NULL;
-lv_font_t *font_b612_mono_24 = NULL;
-lv_font_t *font_b612_mono_bold_32 = NULL;
-lv_font_t *font_b612_mono_bold_38 = NULL;
+#if (SCR_HEIGHT >= 500)
+	#define FLT_DIR
+#endif
 
 static double current_roll = 0.0f;
 static double current_pitch = 0.0f;
@@ -15,9 +14,9 @@ static int current_status = 0;
 
 static char *status_msg1 = "FMC SPD";
 static char *status_msg2 = "LNAV";
-static char *status_msg3 = "TAXI";
+static char *status_msg3 = "PARK";
 
-static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll) {
+static void draw_horizon(lv_layer_t *layer, int w, int32_t h, float pitch, float roll) {
 	int cx = w / 2;
 	int cy = h / 2;
 	cy += (int)pitch;
@@ -32,9 +31,6 @@ static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, f
 	float p_MR_x = R, p_MR_y = 0;
 	float p_BL_x = -R, p_BL_y = R;
 	float p_BR_x = R, p_BR_y = R;
-
-#define ROT_X(x, y) (int)((x * cos_r) - (y * sin_r)) + cx
-#define ROT_Y(x, y) (int)((x * sin_r) + (y * cos_r)) + cy
 
 	lv_point_precise_t pt_TL = {ROT_X(p_TL_x, p_TL_y),
 				    ROT_Y(p_TL_x, p_TL_y)};
@@ -52,7 +48,7 @@ static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, f
 	// sky
 	lv_draw_triangle_dsc_t sky_dsc;
 	lv_draw_triangle_dsc_init(&sky_dsc);
-	sky_dsc.color = lv_color_hex(0x0055ff);
+	sky_dsc.color = lv_color_hex(COLOR_SKY_BLUE);
 	sky_dsc.opa = LV_OPA_COVER;
 
 	sky_dsc.p[0] = pt_TL;
@@ -65,10 +61,10 @@ static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, f
 	sky_dsc.p[2] = pt_ML;
 	lv_draw_triangle(layer, &sky_dsc);
 
-	// earth
+	// ground
 	lv_draw_triangle_dsc_t ground_dsc;
 	lv_draw_triangle_dsc_init(&ground_dsc);
-	ground_dsc.color = lv_color_hex(0x8b4513);
+	ground_dsc.color = lv_color_hex(COLOR_GND_GREEN);
 	ground_dsc.opa = LV_OPA_COVER;
 
 	ground_dsc.p[0] = pt_ML;
@@ -85,16 +81,13 @@ static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, f
 	lv_draw_line_dsc_t horizon_dsc;
 	lv_draw_line_dsc_init(&horizon_dsc);
 	horizon_dsc.color = lv_color_hex(0xffffff);
-	horizon_dsc.width = (double)2.5;
+	horizon_dsc.width = SCR_WIDTH >= 1000 ? (double)2.5 : (double)1.5;
 	horizon_dsc.p1 = pt_ML;
 	horizon_dsc.p2 = pt_MR;
 	lv_draw_line(layer, &horizon_dsc);
-
-#undef ROT_X
-#undef ROT_Y
 }
 
-static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll, int ppu) {
+static void draw_pitch_ladder(lv_layer_t *layer, int w, int32_t h, float pitch, float roll, int ppu) {
 	int cx = w / 2;
 	int cy = h / 2 + (int)pitch;
 
@@ -102,10 +95,8 @@ static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pit
 	float cos_r = cosf(rad);
 	float sin_r = sinf(rad);
 
-#define ROT_X(x, y) (int)((x * cos_r) - (y * sin_r)) + cx
-#define ROT_Y(x, y) (int)((x * sin_r) + (y * cos_r)) + cy
-
-	lv_area_t ladder_clip = {140, SCR_HEIGHT / 3.75, w - 140, h - (SCR_HEIGHT / 3.75)};
+	lv_area_t ladder_clip = {140, SCR_HEIGHT / 3.75,
+				 w - 140, h - (SCR_HEIGHT / 3.75)};
 	lv_area_t initial_clip = layer->_clip_area;
 	layer->_clip_area = ladder_clip;
 
@@ -117,7 +108,7 @@ static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pit
 	lv_draw_label_dsc_t label_dsc;
 	lv_draw_label_dsc_init(&label_dsc);
 	label_dsc.color = lv_color_hex(0xffffff);
-	label_dsc.font = font_b612_mono_24;
+	label_dsc.font = FONT_LADDER;
 	label_dsc.align = LV_TEXT_ALIGN_CENTER;
 
 	for (int v = -30; v <= 30; v += 5) {
@@ -126,7 +117,7 @@ static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pit
 
 		int y_offset = -v * ppu;
 
-		int half_w = (v % 10 == 0) ? 90 : 40;
+		int half_w = (v % 10 == 0) ? (SCR_WIDTH / 10) : (SCR_WIDTH / 20);
 
 		line_dsc.p1 = (lv_point_precise_t){ROT_X(-half_w, y_offset),
 						   ROT_Y(-half_w, y_offset)};
@@ -138,21 +129,21 @@ static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pit
 			char buf[8];
 			sprintf(buf, "%d", abs(v));
 
-			int tx_L = -half_w - 20;
-			int tx_R = half_w + 20;
+			int tx_L = -half_w - (SCR_WIDTH / 40.0);
+			int tx_R = half_w + (SCR_WIDTH / 40.0);
 
 			lv_point_precise_t t_pt_L = {ROT_X(tx_L, y_offset),
 						     ROT_Y(tx_L, y_offset)};
 			lv_point_precise_t t_pt_R = {ROT_X(tx_R, y_offset),
 						     ROT_Y(tx_R, y_offset)};
 
-			lv_area_t txt_area_L = {t_pt_L.x - 20, t_pt_L.y - 10,
-						t_pt_L.x + 20, t_pt_L.y + 10};
+			lv_area_t txt_area_L = {t_pt_L.x - (SCR_WIDTH / 40.0), t_pt_L.y - (SCR_WIDTH / 80.0),
+						t_pt_L.x + (SCR_WIDTH / 40.0), t_pt_L.y + (SCR_WIDTH / 80.0)};
 			label_dsc.text = buf;
 			lv_draw_label(layer, &label_dsc, &txt_area_L);
 
-			lv_area_t txt_area_R = {t_pt_R.x - 20, t_pt_R.y - 10,
-						t_pt_R.x + 20, t_pt_R.y + 10};
+			lv_area_t txt_area_R = {t_pt_R.x - (SCR_WIDTH / 40.0), t_pt_R.y - (SCR_WIDTH / 80.0),
+						t_pt_R.x + (SCR_WIDTH / 40.0), t_pt_R.y + (SCR_WIDTH / 80.0)};
 			lv_draw_label(layer, &label_dsc, &txt_area_R);
 		} else {
 			double quart_down = v - 2.5;
@@ -161,52 +152,51 @@ static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pit
 			double q_offset_d = -quart_down * ppu;
 			double q_offset_u = -quart_up * ppu;
 
-			line_dsc.p1 = (lv_point_precise_t){ROT_X(-20, q_offset_d),
-							   ROT_Y(-20, q_offset_d)};
-			line_dsc.p2 = (lv_point_precise_t){ROT_X(20, q_offset_d),
-							   ROT_Y(20, q_offset_d)};
+			line_dsc.p1 = (lv_point_precise_t){ROT_X(-(SCR_WIDTH / 40.0), q_offset_d),
+							   ROT_Y(-(SCR_WIDTH / 40.0), q_offset_d)};
+			line_dsc.p2 = (lv_point_precise_t){ROT_X((SCR_WIDTH / 40.0), q_offset_d),
+							   ROT_Y((SCR_WIDTH / 40.0), q_offset_d)};
 			lv_draw_line(layer, &line_dsc);
 
-			line_dsc.p1 = (lv_point_precise_t){ROT_X(-20, q_offset_u),
-							   ROT_Y(-20, q_offset_u)};
-			line_dsc.p2 = (lv_point_precise_t){ROT_X(20, q_offset_u),
-							   ROT_Y(20, q_offset_u)};
+			line_dsc.p1 = (lv_point_precise_t){ROT_X(-(SCR_WIDTH / 40.0), q_offset_u),
+							   ROT_Y(-(SCR_WIDTH / 40.0), q_offset_u)};
+			line_dsc.p2 = (lv_point_precise_t){ROT_X((SCR_WIDTH / 40.0), q_offset_u),
+							   ROT_Y((SCR_WIDTH / 40.0), q_offset_u)};
 			lv_draw_line(layer, &line_dsc);
 
 		}
 	}
 	layer->_clip_area = initial_clip;
-
-#undef ROT_X
-#undef ROT_Y
 }
 
-static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h) {
+static void draw_chevron(lv_layer_t *layer, int w, int32_t h) {
 	int mcx = w / 2;
 	int mcy = h / 2;
 
 	lv_draw_line_dsc_t aircraft_dsc;
 	lv_draw_line_dsc_init(&aircraft_dsc);
 	aircraft_dsc.color = lv_color_hex(0xffffff);
-	aircraft_dsc.width = 8;
+	aircraft_dsc.width = SCR_WIDTH >= 1000 ? 8 : 6;
 
 	// chevron wings (--)
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx - 120, mcy};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx - 40, mcy};
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx - (SCR_WIDTH / 8.0), mcy};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx - (SCR_WIDTH / 30.0), mcy};
 	lv_draw_line(layer, &aircraft_dsc);
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx - 40, mcy - (aircraft_dsc.width / 2.0)};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx - 40, mcy + 24};
-	lv_draw_line(layer, &aircraft_dsc);
-
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx + 40, mcy};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx + 120, mcy};
-	lv_draw_line(layer, &aircraft_dsc);
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx + 40, mcy - (aircraft_dsc.width / 2.0)};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx + 40, mcy + 24};
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx - (SCR_WIDTH / 30.0),
+					       mcy - (aircraft_dsc.width / 2.0)};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx - (SCR_WIDTH / 30.0), mcy + (SCR_HEIGHT / 37.5)};
 	lv_draw_line(layer, &aircraft_dsc);
 
-	aircraft_dsc.p1 = (lv_point_precise_t){mcx, mcy - 5};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx, mcy + 5};
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0), mcy};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx + (SCR_WIDTH / 8.0), mcy};
+	lv_draw_line(layer, &aircraft_dsc);
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0),
+					       mcy - (aircraft_dsc.width / 2.0)};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0), mcy + (SCR_HEIGHT / 37.5)};
+	lv_draw_line(layer, &aircraft_dsc);
+
+	aircraft_dsc.p1 = (lv_point_precise_t){mcx, mcy - 2.5};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx, mcy + 2.5};
 	lv_draw_line(layer, &aircraft_dsc);
 }
 
@@ -235,7 +225,7 @@ static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 	lv_draw_label_dsc_t label_dsc;
 	lv_draw_label_dsc_init(&label_dsc);
 	label_dsc.color = lv_color_hex(0xffffff);
-	label_dsc.font = font_b612_20;
+	label_dsc.font = FONT_TAPE;
 
 	double current_val = 0;
 	int diff = 0;
@@ -270,14 +260,17 @@ static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 		int delta_v = v - (int)current_val;
 		int y_pos = (y + (TAPE_HEIGHT / 2)) - (delta_v * ppu);
 
+		if (y_pos < -1000 || y_pos > TAPE_HEIGHT + 1000)
+			continue;
+
 		if (tape_loc == TAPE_LOC_LEFT) {
 			line_dsc.p1 =
-			    (lv_point_precise_t){x + TAPE_WIDTH - 20, y_pos};
+			    (lv_point_precise_t){x + TAPE_WIDTH - (SCR_WIDTH / 60.0), y_pos};
 			line_dsc.p2 =
 			    (lv_point_precise_t){x + TAPE_WIDTH, y_pos};
 		} else if (tape_loc == TAPE_LOC_RIGHT) {
 			line_dsc.p1 = (lv_point_precise_t){x, y_pos};
-			line_dsc.p2 = (lv_point_precise_t){x + 20, y_pos};
+			line_dsc.p2 = (lv_point_precise_t){x + (SCR_WIDTH / 60.0), y_pos};
 		}
 		lv_draw_line(layer, &line_dsc);
 
@@ -286,13 +279,13 @@ static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 
 		lv_area_t text_area;
 		if (tape_loc == TAPE_LOC_LEFT) {
-			text_area.x1 = x + 10;
-			text_area.y1 = y_pos - 9;
-			text_area.x2 = x + TAPE_WIDTH - 25;
+			text_area.x1 = x + (SCR_WIDTH >= 1000 ? 10 : 5);
+			text_area.y1 = y_pos - 6;
+			text_area.x2 = x + TAPE_WIDTH - (POINTER_PADDING * 2);
 			text_area.y2 = y_pos + 10;
 		} else if (tape_loc == TAPE_LOC_RIGHT) {
-			text_area.x1 = x + 25;
-			text_area.y1 = y_pos - 7;
+			text_area.x1 = x + (POINTER_PADDING * 2);
+			text_area.y1 = y_pos - 6;
 			text_area.x2 = x + TAPE_WIDTH;
 			text_area.y2 = y_pos + 10;
 		}
@@ -318,10 +311,13 @@ static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 	char buf[8];
 	sprintf(buf, "%d", (int)current_val);
 
-	lv_area_t val_area = {tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 15) : (x - 150),
-			      y + (TAPE_HEIGHT / 2) - 30,
-			      tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 150) : (x - 15),
-			      y + (TAPE_HEIGHT / 2) + 30};
+	double w_val = SCR_WIDTH / 10.0;
+	double h_val = SCR_HEIGHT / 10.0;
+
+	lv_area_t val_area = {tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + POINTER_PADDING) : (x - (w_val + POINTER_PADDING)),
+			      y + (TAPE_HEIGHT / 2) - (h_val / 2),
+			      tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + (w_val + POINTER_PADDING)) : (x - POINTER_PADDING),
+			      y + (TAPE_HEIGHT / 2) + (h_val / 2)};
 
 	lv_draw_rect_dsc_t val_bg_dsc;
 	lv_draw_rect_dsc_init(&val_bg_dsc);
@@ -330,24 +326,23 @@ static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 	val_bg_dsc.radius = 3;
 	lv_draw_rect(layer, &val_bg_dsc, &val_area);
 
-	lv_area_t val_text_area = {tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 15) : (x - 145),
-			      y + (TAPE_HEIGHT / 2) - 10,
-			      tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + 145) : (x - 15),
-			      y + (TAPE_HEIGHT / 2) + 5};
+	lv_area_t val_text_area = {tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + (POINTER_PADDING * 1.6)) : (x - ((w_val + POINTER_PADDING) * 0.9)),
+			      y + (TAPE_HEIGHT / 2) - (h_val / 4),
+			      tape_loc == TAPE_LOC_LEFT ? (x + TAPE_WIDTH + ((w_val + POINTER_PADDING) * 0.9)) : (x - (POINTER_PADDING * 1.6)),
+			      y + (TAPE_HEIGHT / 2) + (h_val / 4)};
 
-	label_dsc.font = &lv_font_unscii_16;
-	label_dsc.align = LV_TEXT_ALIGN_CENTER;
+	label_dsc.font = FONT_TAPE_VAL;
+	label_dsc.align = LV_TEXT_ALIGN_RIGHT;
 	label_dsc.text = buf;
 	lv_draw_label(layer, &label_dsc, &val_text_area);
-
 }
 
-static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float heading) {
-	int32_t hdg_tape_w = 400;
-	int32_t hdg_tape_h = 40;
-	int32_t hdg_tape_x = (w - hdg_tape_w) / 2;
-	int32_t hdg_tape_y = h - hdg_tape_h - 20;
-	int32_t hdg_tape_cx = hdg_tape_x + (hdg_tape_w / 2);
+static void create_heading_tape(lv_layer_t *layer, int w, int32_t h, float heading) {
+	int hdg_tape_w = w * 0.4;
+	int hdg_tape_h = h * 0.1;
+	int hdg_tape_x = (w - hdg_tape_w) / 2;
+	int hdg_tape_y = h - hdg_tape_h - (h * 0.02);
+	int hdg_tape_cx = hdg_tape_x + (hdg_tape_w / 2);
 
 	lv_area_t hdg_area = {hdg_tape_x,
 			      hdg_tape_y,
@@ -363,11 +358,13 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 	hdg_bg_dsc.bg_opa = LV_OPA_80;
 	lv_draw_rect(layer, &hdg_bg_dsc, &hdg_area);
 
-	int32_t hdg_step = 10;
+	int hdg_step = 10;
 	float hdg_px_per_deg = 4.0f;
 
-	int32_t h_min = ((int32_t)heading - 60) / hdg_step * hdg_step;
-	int32_t h_max = ((int32_t)heading + 60) / hdg_step * hdg_step;
+	int diff = SCR_WIDTH / 5;
+
+	int h_min = ((int32_t)heading - diff) / hdg_step * hdg_step;
+	int h_max = ((int32_t)heading + diff) / hdg_step * hdg_step;
 
 	lv_draw_line_dsc_t hdg_line_dsc;
 	lv_draw_line_dsc_init(&hdg_line_dsc);
@@ -377,19 +374,20 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 	lv_draw_label_dsc_t hdg_label_dsc;
 	lv_draw_label_dsc_init(&hdg_label_dsc);
 	hdg_label_dsc.color = lv_color_hex(0xffffff);
+	hdg_label_dsc.font = FONT_HDG;
 
-	for (int32_t v = h_min; v <= h_max; v += hdg_step) {
-		int32_t display_val = v;
+	for (int v = h_min; v <= h_max; v += hdg_step) {
+		int display_val = v;
 		while (display_val < 0)
 			display_val += 360;
 		while (display_val >= 360)
 			display_val -= 360;
 
-		int32_t delta_v = v - (int32_t)heading;
-		int32_t x_pos = hdg_tape_cx + (int32_t)(delta_v * hdg_px_per_deg);
+		int delta_v = v - (int32_t)heading;
+		int x_pos = hdg_tape_cx + (int32_t)(delta_v * hdg_px_per_deg);
 
 		hdg_line_dsc.p1 = (lv_point_precise_t){x_pos, hdg_tape_y};
-		hdg_line_dsc.p2 = (lv_point_precise_t){x_pos, hdg_tape_y + 10};
+		hdg_line_dsc.p2 = (lv_point_precise_t){x_pos, hdg_tape_y + (SCR_HEIGHT / 64.0)};
 		lv_draw_line(layer, &hdg_line_dsc);
 
 		if (display_val % 30 == 0) {
@@ -405,8 +403,8 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 			else
 				sprintf(buf, "%d", display_val / 10);
 
-			lv_area_t txt_area = {x_pos - 15, hdg_tape_y + 15,
-					      x_pos + 15, hdg_tape_y + 35};
+			lv_area_t txt_area = {x_pos - 15, hdg_tape_y + (SCR_HEIGHT / 32.0),
+					      x_pos + 15, hdg_tape_y + (SCR_HEIGHT / 10.0)};
 			hdg_label_dsc.text = buf;
 			lv_draw_label(layer, &hdg_label_dsc, &txt_area);
 		}
@@ -415,8 +413,8 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 
 	hdg_line_dsc.color = lv_color_hex(0xffff00);
 	hdg_line_dsc.width = 3;
-	hdg_line_dsc.p1 = (lv_point_precise_t){hdg_tape_cx, hdg_tape_y - 5};
-	hdg_line_dsc.p2 = (lv_point_precise_t){hdg_tape_cx, hdg_tape_y + 15};
+	hdg_line_dsc.p1 = (lv_point_precise_t){hdg_tape_cx, hdg_tape_y - (SCR_HEIGHT / 128.0)};
+	hdg_line_dsc.p2 = (lv_point_precise_t){hdg_tape_cx, hdg_tape_y + (SCR_HEIGHT / 32.0)};
 	lv_draw_line(layer, &hdg_line_dsc);
 
 	int exact_hdg = (int)heading;
@@ -428,8 +426,8 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 	char buf_exact_hdg[8];
 	sprintf(buf_exact_hdg, "%03d°", exact_hdg);
 
-	lv_area_t ehdg_area = {hdg_tape_cx - 20, hdg_tape_y - 28,
-			       hdg_tape_cx + 20, hdg_tape_y - 5};
+	lv_area_t ehdg_area = {hdg_tape_cx - (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 12.0),
+			       hdg_tape_cx + (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 200.0)};
 
 	lv_draw_rect_dsc_t ehdg_bg_dsc;
 	lv_draw_rect_dsc_init(&ehdg_bg_dsc);
@@ -442,22 +440,23 @@ static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float h
 	lv_draw_label_dsc_init(&ehdg_label_dsc);
 	ehdg_label_dsc.color = lv_color_hex(0xffffff);
 	ehdg_label_dsc.align = LV_TEXT_ALIGN_CENTER;
+	ehdg_label_dsc.font = FONT_TAPE_VAL;
 
-	lv_area_t ehdg_text_area = {hdg_tape_cx - 20, hdg_tape_y - 25,
-				    hdg_tape_cx + 20, hdg_tape_y - 5};
+	lv_area_t ehdg_text_area = {hdg_tape_cx - (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 14.0),
+				    hdg_tape_cx + (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 200.0)};
 	ehdg_label_dsc.text = buf_exact_hdg;
 	lv_draw_label(layer, &ehdg_label_dsc, &ehdg_text_area);
 }
 
-static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float roll) {
+static void draw_roll_indicator(lv_layer_t *layer, int w, int32_t h, float roll) {
 	int cx = w / 2;
 	int cy = h / 2;
-	int r = 330;
+	int r =  h * 0.35;
 
 	lv_draw_arc_dsc_t arc_dsc;
 	lv_draw_arc_dsc_init(&arc_dsc);
 	arc_dsc.color = lv_color_hex(0xffffff);
-	arc_dsc.width = 3;
+	arc_dsc.width = SCR_WIDTH >= 1000 ? 3 : 2;
 	arc_dsc.start_angle = 210;
 	arc_dsc.end_angle = 330;
 	arc_dsc.center.x = cx;
@@ -466,6 +465,7 @@ static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float r
 
 	lv_draw_arc(layer, &arc_dsc);
 
+#ifdef FLT_DIR
 	lv_area_t fltdir_area = {cx - 90, cy - (r + 60),
 				 cx + 90, cy - (r + 15)};
 	lv_draw_label_dsc_t fltdir_label_dsc;
@@ -473,9 +473,9 @@ static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float r
 	fltdir_label_dsc.color = lv_color_hex(0x00ff00);
 	fltdir_label_dsc.align = LV_TEXT_ALIGN_CENTER;
 	fltdir_label_dsc.text = "FLT DIR";
-	fltdir_label_dsc.font = font_b612_mono_bold_38;
+	fltdir_label_dsc.font = FONT_FLTDIR;
 	lv_draw_label(layer, &fltdir_label_dsc, &fltdir_area);
-
+#endif
 
 	int angles[] = {-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60};
 	int num_angles = sizeof(angles) / sizeof(angles[0]);
@@ -483,7 +483,7 @@ static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float r
 	lv_draw_line_dsc_t line_dsc;
 	lv_draw_line_dsc_init(&line_dsc);
 	line_dsc.color = lv_color_hex(0xffffff);
-	line_dsc.width = 3;
+	line_dsc.width = SCR_WIDTH >= 1000 ? 3 : 2;
 
 	for (int i = 0; i < num_angles; i++) {
 		int a = angles[i];
@@ -503,8 +503,10 @@ static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float r
 			int r_out = r + 15;
 			if (abs(a) == 45) r_out = r + 10;
 
-			line_dsc.p1 = (lv_point_precise_t){cx + r * cos(rad), cy + r * sin(rad)};
-			line_dsc.p2 = (lv_point_precise_t){cx + r_out * cos(rad), cy + r_out * sin(rad)};
+			line_dsc.p1 = (lv_point_precise_t){cx + r * cos(rad),
+							   cy + r * sin(rad)};
+			line_dsc.p2 = (lv_point_precise_t){cx + r_out * cos(rad),
+							   cy + r_out * sin(rad)};
 			lv_draw_line(layer, &line_dsc);
 		}
 	}
@@ -513,9 +515,6 @@ static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float r
 	double cos_r = cos(r_rad);
 	double sin_r = sin(r_rad);
 
-	#define ROT_X(x, y) (int)(((x) * cos_r) - ((y) * sin_r)) + cx
-	#define ROT_Y(x, y) (int)(((x) * sin_r) + ((y) * cos_r)) + cy
-
 	lv_point_precise_t pt_tip = {ROT_X(0, -r), ROT_Y(0, -r)};
 	lv_point_precise_t pt_bl = {ROT_X(-20, -r + 25), ROT_Y(-20, -r + 25)};
 	lv_point_precise_t pt_br = {ROT_X(20, -r + 25), ROT_Y(20, -r + 25)};
@@ -523,24 +522,15 @@ static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float r
 	lv_draw_line_dsc_t ptr_dsc;
 	lv_draw_line_dsc_init(&ptr_dsc);
 	ptr_dsc.color = lv_color_hex(0xffffff);
-	ptr_dsc.width = 5;
+	ptr_dsc.width = SCR_WIDTH >= 1000 ? 5 : 3;
 
 	ptr_dsc.p1 = pt_tip; ptr_dsc.p2 = pt_bl; lv_draw_line(layer, &ptr_dsc);
 	ptr_dsc.p1 = pt_bl; ptr_dsc.p2 = pt_br; lv_draw_line(layer, &ptr_dsc);
 	ptr_dsc.p1 = pt_br; ptr_dsc.p2 = pt_tip; lv_draw_line(layer, &ptr_dsc);
-
-	#undef ROT_X
-	#undef ROT_Y
 }
 
 static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, const char *msg3) {
 	int cx = SCR_WIDTH / 2;
-	char buf1[16];
-	char buf2[16];
-	char buf3[16];
-	sprintf(buf1, "%s", msg1);
-	sprintf(buf2, "%s", msg2);
-	sprintf(buf3, "%s", msg3);
 
 	lv_draw_rect_dsc_t fma_bg_dsc;
 	lv_draw_rect_dsc_init(&fma_bg_dsc);
@@ -548,28 +538,28 @@ static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, con
 	fma_bg_dsc.bg_opa = LV_OPA_70;
 
 	lv_area_t fma1_area = {cx - (SCR_WIDTH / 4.0),
-			       10,
+			       (SCR_HEIGHT / 100.0),
 			       cx - (SCR_WIDTH / 10.0),
-			       10 + (SCR_HEIGHT / 16.0)};
+			       (SCR_HEIGHT / 100.0) + (SCR_HEIGHT / 16.0)};
 	lv_draw_rect(layer, &fma_bg_dsc, &fma1_area);
 
 	lv_area_t fma2_area = {cx - ((SCR_WIDTH / 40.0) * 3),
-			       10,
+			       (SCR_HEIGHT / 100.0),
 			       cx + ((SCR_WIDTH / 40.0) * 3),
-			       10 + (SCR_HEIGHT / 16.0)};
+			       (SCR_HEIGHT / 100.0) + (SCR_HEIGHT / 16.0)};
 	lv_draw_rect(layer, &fma_bg_dsc, &fma2_area);
 
 	lv_area_t fma3_area = {cx + (SCR_WIDTH / 10.0),
-			       10,
+			       (SCR_HEIGHT / 100.0),
 			       cx + (SCR_WIDTH / 4.0),
-			       10 + (SCR_HEIGHT / 16.0)};
+			       (SCR_HEIGHT / 100.0) + (SCR_HEIGHT / 16.0)};
 	lv_draw_rect(layer, &fma_bg_dsc, &fma3_area);
 
 	lv_draw_label_dsc_t fma_label_dsc;
 	lv_draw_label_dsc_init(&fma_label_dsc);
 	fma_label_dsc.color = lv_color_hex(0x00ff00);
 	fma_label_dsc.align = LV_TEXT_ALIGN_CENTER;
-	fma_label_dsc.font = font_b612_mono_bold_32;
+	fma_label_dsc.font = FONT_FMA;
 
 	fma_label_dsc.text = msg1;
 	lv_draw_label(layer, &fma_label_dsc, &fma1_area);
@@ -579,8 +569,22 @@ static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, con
 	lv_draw_label(layer, &fma_label_dsc, &fma3_area);
 }
 
+int sdl_event_watcher(void *userdata, SDL_Event *event) {
+	if (event->type == SDL_MOUSEWHEEL) {
+		if (event->wheel.y > 0) {
+			current_speed += 2.5f;
+		} else if (event->wheel.y < 0) {
+			current_speed -= 2.5f;
+		}
+		if (current_speed < 0.0f) {
+			current_speed = 0.0f;
+		}
+	}
+	return 1;
+}
+
 static void input_event(lv_event_t *e) {
-	uint32_t key = lv_event_get_key(e);
+	uint key = lv_event_get_key(e);
 
 	switch (key) {
 		case 'w':
@@ -611,6 +615,10 @@ static void input_event(lv_event_t *e) {
 				current_heading += 2.0f;
 			break;
 
+		case '0':
+			current_status = STATUS_PARK;
+			status_msg3 = "PARK";
+			break;
 		case '1':
 			current_status = STATUS_TAXI;
 			status_msg3 = "TAXI";
@@ -639,12 +647,13 @@ static void pfd_draw(lv_event_t *e) {
 	lv_obj_t *obj = lv_event_get_target(e);
 	lv_layer_t *layer = lv_event_get_layer(e);
 
-	int32_t w = lv_obj_get_width(obj);
-	int32_t h = lv_obj_get_height(obj);
+	int w = lv_obj_get_width(obj);
+	int h = lv_obj_get_height(obj);
 
 	draw_horizon(layer, w, h, current_pitch, current_roll);
 
-	draw_pitch_ladder(layer, w, h, current_pitch, current_roll, 10);
+	draw_pitch_ladder(layer, w, h, current_pitch, current_roll,
+			  SCR_HEIGHT / 60.0);
 
 	draw_roll_indicator(layer, w, h, current_roll);
 
@@ -662,16 +671,108 @@ static void pfd_draw(lv_event_t *e) {
 	draw_chevron(layer, w, h);
 }
 
+static void init_fonts() {
+	font_b612_20 = lv_freetype_font_create(PATH_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					20, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_10 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					10, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_12 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					12, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_14 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					14, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_16 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					16, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_18 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					18, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_20 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					20, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_22 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					22, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_24 = lv_freetype_font_create(PATH_MONO_REGULAR,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					24, LV_FREETYPE_FONT_STYLE_NORMAL);
+	font_b612_mono_bold_12 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					12, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_14 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					14, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_16 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					16, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_18 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					18, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_20 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					20, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_22 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					22, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_24 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					24, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_26 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					26, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_28 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					28, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_30 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					30, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_32 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					32, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_34 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					34, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_36 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					36, LV_FREETYPE_FONT_STYLE_BOLD);
+	font_b612_mono_bold_38 = lv_freetype_font_create(PATH_MONO_BOLD,
+					LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+					38, LV_FREETYPE_FONT_STYLE_BOLD);
+}
+
+static void destroy_fonts() {
+	lv_freetype_font_delete(font_b612_20);
+	lv_freetype_font_delete(font_b612_mono_10);
+	lv_freetype_font_delete(font_b612_mono_12);
+	lv_freetype_font_delete(font_b612_mono_14);
+	lv_freetype_font_delete(font_b612_mono_16);
+	lv_freetype_font_delete(font_b612_mono_18);
+	lv_freetype_font_delete(font_b612_mono_20);
+	lv_freetype_font_delete(font_b612_mono_22);
+	lv_freetype_font_delete(font_b612_mono_24);
+	lv_freetype_font_delete(font_b612_mono_bold_12);
+	lv_freetype_font_delete(font_b612_mono_bold_14);
+	lv_freetype_font_delete(font_b612_mono_bold_16);
+	lv_freetype_font_delete(font_b612_mono_bold_18);
+	lv_freetype_font_delete(font_b612_mono_bold_20);
+	lv_freetype_font_delete(font_b612_mono_bold_22);
+	lv_freetype_font_delete(font_b612_mono_bold_24);
+	lv_freetype_font_delete(font_b612_mono_bold_26);
+	lv_freetype_font_delete(font_b612_mono_bold_28);
+	lv_freetype_font_delete(font_b612_mono_bold_30);
+	lv_freetype_font_delete(font_b612_mono_bold_32);
+	lv_freetype_font_delete(font_b612_mono_bold_34);
+	lv_freetype_font_delete(font_b612_mono_bold_36);
+	lv_freetype_font_delete(font_b612_mono_bold_38);
+}
+
 int main() {
 	lv_init();
-	font_b612_20 = lv_freetype_font_create("/home/ardatrkmnoglu/Documents/B612-Regular.ttf",
-				     LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 20, LV_FREETYPE_FONT_STYLE_NORMAL);
-	font_b612_mono_24 = lv_freetype_font_create("/home/ardatrkmnoglu/Documents/B612Mono-Regular.ttf",
-					  LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 24, LV_FREETYPE_FONT_STYLE_NORMAL);
-	font_b612_mono_bold_32 = lv_freetype_font_create("/home/ardatrkmnoglu/Documents/B612Mono-Bold.ttf",
-					  LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 32, LV_FREETYPE_FONT_STYLE_BOLD);
-	font_b612_mono_bold_38 = lv_freetype_font_create("/home/ardatrkmnoglu/Documents/B612Mono-Bold.ttf",
-					  LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 38, LV_FREETYPE_FONT_STYLE_BOLD);
+
+	init_fonts();
 
 	lv_display_t *dpy = lv_sdl_window_create(SCR_WIDTH, SCR_HEIGHT);
 
@@ -694,6 +795,7 @@ int main() {
 
 	lv_obj_add_event_cb(screen, pfd_draw, LV_EVENT_DRAW_MAIN, NULL);
 	lv_obj_add_event_cb(screen, input_event, LV_EVENT_KEY, NULL);
+	SDL_AddEventWatch(sdl_event_watcher, NULL);
 
 	// initial data
 	current_roll = 0.0;
@@ -713,9 +815,36 @@ int main() {
 		current_altitude += climb_rate;
 		if (current_altitude < 0) current_altitude = 0;
 
+		// mouse control through sdl2
+		int mouse_x, mouse_y;
+		Uint32 mouse_buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
+
+		if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) {
+			int32_t screen_w = lv_display_get_horizontal_resolution(NULL);
+			int32_t screen_h = lv_display_get_vertical_resolution(NULL);
+
+			int32_t cx = screen_w / 2;
+			int32_t cy = screen_h / 2;
+
+			int32_t dx = mouse_x - cx;
+			int32_t dy = mouse_y - cy;
+
+			float max_roll = 45.0f;
+			float max_pitch = 60.0f;
+
+			current_roll = -((float)dx / (float)cx) * max_roll;
+			current_pitch = ((float)dy / (float)cy) * max_pitch;
+
+			if (current_roll < -45.0f) current_roll = -45.0f;
+			if (current_roll > 45.0f) current_roll = 45.0f;
+			if (current_pitch < -120.0f) current_pitch = -120.0f;
+			if (current_pitch > 120.0f) current_pitch = 120.0f;
+		}
+
 		lv_obj_invalidate(screen);
 		lv_timer_handler();
 		usleep(20000);
 	}
+	destroy_fonts();
 	return 0;
 }
