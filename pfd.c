@@ -820,11 +820,8 @@ int main() {
 		Uint32 mouse_buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
 
 		if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-			int32_t screen_w = lv_display_get_horizontal_resolution(NULL);
-			int32_t screen_h = lv_display_get_vertical_resolution(NULL);
-
-			int32_t cx = screen_w / 2;
-			int32_t cy = screen_h / 2;
+			int32_t cx = SCR_WIDTH / 2;
+			int32_t cy = SCR_HEIGHT / 2;
 
 			int32_t dx = mouse_x - cx;
 			int32_t dy = mouse_y - cy;
@@ -833,12 +830,10 @@ int main() {
 			float max_pitch = 60.0f;
 
 			current_roll = -((float)dx / (float)cx) * max_roll;
-			current_pitch = ((float)dy / (float)cy) * max_pitch;
+			current_pitch = ((float)dy / 200.0) * max_pitch;
 
 			if (current_roll < -45.0f) current_roll = -45.0f;
 			if (current_roll > 45.0f) current_roll = 45.0f;
-			if (current_pitch < -120.0f) current_pitch = -120.0f;
-			if (current_pitch > 120.0f) current_pitch = 120.0f;
 		}
 
 		lv_obj_invalidate(screen);
