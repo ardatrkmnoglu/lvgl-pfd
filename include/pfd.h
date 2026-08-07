@@ -1,6 +1,12 @@
+// pfd.h: changing the values in this file is NOT RECOMMENDED.
+// Otherwise, the program may become corrupted or may not work properly.
+// In such a case, run:
+//$ git restore include/pfd.h
+
 #ifndef PFD_H
 #define PFD_H
 
+#include "../config.h"
 #include <lvgl/lvgl.h>
 #include <SDL2/SDL.h>
 #include <math.h>
@@ -15,9 +21,10 @@
 #define ROT_Y(x, y) (int)(((x) * sin_r) + ((y) * cos_r)) + cy
 
 /* screen dimensions */
-#define SCR_WIDTH  480
-#define SCR_HEIGHT 272
 #define R (SCR_WIDTH + SCR_HEIGHT)
+
+/* ppu value for the pitch ladder */
+#define PITCH_PPU (SCR_HEIGHT / 60.0)
 
 /* tape dimensions */
 #define TAPE_WIDTH  (SCR_WIDTH * (0.1))
@@ -45,6 +52,10 @@
 #define POINTER_LEFT_Y1(y) ((y) + (TAPE_HEIGHT / 2) - 2)
 #define POINTER_LEFT_X2(x) ((x) + (POINTER_PADDING / 3))
 #define POINTER_LEFT_Y2(y) ((y) + (TAPE_HEIGHT / 2) + 2)
+
+/* message box dimensions */
+#define MSGBOX_WIDTH  (SCR_WIDTH / 3)
+#define MSGBOX_HEIGHT (SCR_HEIGHT / 7.5)
 
 /* status */
 #define STATUS_PARK    0
@@ -87,22 +98,30 @@ static lv_font_t *font_b612_mono_bold_38 = NULL;
 #define FONT_LADDER ((SCR_WIDTH >= 1000) ? font_b612_mono_24 : font_b612_mono_12)
 #define FONT_HDG ((SCR_WIDTH >= 1000) ? font_b612_mono_16 : font_b612_mono_10)
 #define FONT_FMA ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_32 : font_b612_mono_bold_16)
+#define FONT_MSG ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_30 : font_b612_mono_bold_14)
 #define FONT_FLTDIR ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_38 : font_b612_mono_bold_18)
 
 /* colors */
-#define COLOR_SKY_BLUE   0x0055ff
-#define COLOR_GND_GREEN  0x0e8040
-#define COLOR_GND_ORANGE 0x8b4513
+#if PFD_BG_NIGHT_MODE == 0
+	#define COLOR_SKY_BLUE 0x0055ff
+	#define COLOR_GND_GREEN  0x0e8040
+	#define COLOR_GND_ORANGE 0x8b4513
+#else
+	#define COLOR_SKY_BLUE 0x000a33
+	#define COLOR_GND_GREEN  0x052010
+	#define COLOR_GND_ORANGE 0x3b1b0b
+#endif
 
 /* functions */
 static void draw_horizon(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll);
-static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll, int ppu);
+static void draw_pitch_ladder(lv_layer_t *layer, int32_t w, int32_t h, float pitch, float roll);
 static void draw_chevron(lv_layer_t *layer, int32_t w, int32_t h);
 static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 		      int tape_info, int tape_step, double ppu);
 static void create_heading_tape(lv_layer_t *layer, int32_t w, int32_t h, float heading);
 static void draw_roll_indicator(lv_layer_t *layer, int32_t w, int32_t h, float roll);
 static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, const char *msg3);
+static void print_msg(lv_layer_t *layer, int x, int y, const char *msg);
 static void pfd_draw(lv_event_t *e);
 
 #endif // PFD_H

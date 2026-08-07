@@ -1,4 +1,10 @@
 #include "include/pfd.h"
+#include <lvgl/core/lv_area.h>
+#include <lvgl/draw/lv_color.h>
+#include <lvgl/draw/lv_draw_label.h>
+#include <lvgl/draw/lv_draw_rect.h>
+#include <lvgl/font/lv_text.h>
+#include <stdio.h>
 
 #if (SCR_HEIGHT >= 500)
 	#define FLT_DIR
@@ -19,7 +25,7 @@ static char *status_msg3 = "PARK";
 static void draw_horizon(lv_layer_t *layer, int w, int32_t h, float pitch, float roll) {
 	int cx = w / 2;
 	int cy = h / 2;
-	cy += (int)pitch;
+	cy += (int)(pitch * PITCH_PPU);
 
 	double rad = DEG_TO_RAD(roll);
 	float cos_r = cosf(rad);
@@ -87,9 +93,9 @@ static void draw_horizon(lv_layer_t *layer, int w, int32_t h, float pitch, float
 	lv_draw_line(layer, &horizon_dsc);
 }
 
-static void draw_pitch_ladder(lv_layer_t *layer, int w, int32_t h, float pitch, float roll, int ppu) {
+static void draw_pitch_ladder(lv_layer_t *layer, int w, int32_t h, float pitch, float roll) {
 	int cx = w / 2;
-	int cy = h / 2 + (int)pitch;
+	int cy = h / 2 + (int)(pitch * PITCH_PPU);
 
 	double rad = DEG_TO_RAD(roll);
 	float cos_r = cosf(rad);
@@ -115,7 +121,7 @@ static void draw_pitch_ladder(lv_layer_t *layer, int w, int32_t h, float pitch, 
 		if (v == 0)
 			continue;
 
-		int y_offset = -v * ppu;
+		int y_offset = -v * PITCH_PPU;
 
 		int half_w = (v % 10 == 0) ? (SCR_WIDTH / 10) : (SCR_WIDTH / 20);
 
@@ -127,7 +133,7 @@ static void draw_pitch_ladder(lv_layer_t *layer, int w, int32_t h, float pitch, 
 
 		if (v % 10 == 0) {
 			char buf[8];
-			sprintf(buf, "%d", abs(v));
+			sprintf(buf, "%d", v);
 
 			int tx_L = -half_w - (SCR_WIDTH / 40.0);
 			int tx_R = half_w + (SCR_WIDTH / 40.0);
@@ -137,20 +143,24 @@ static void draw_pitch_ladder(lv_layer_t *layer, int w, int32_t h, float pitch, 
 			lv_point_precise_t t_pt_R = {ROT_X(tx_R, y_offset),
 						     ROT_Y(tx_R, y_offset)};
 
-			lv_area_t txt_area_L = {t_pt_L.x - (SCR_WIDTH / 40.0), t_pt_L.y - (SCR_WIDTH / 80.0),
-						t_pt_L.x + (SCR_WIDTH / 40.0), t_pt_L.y + (SCR_WIDTH / 80.0)};
+			lv_area_t txt_area_L = {t_pt_L.x - (SCR_WIDTH / 40.0),
+						t_pt_L.y - (SCR_WIDTH / 80.0),
+						t_pt_L.x + (SCR_WIDTH / 40.0),
+						t_pt_L.y + (SCR_WIDTH / 80.0)};
 			label_dsc.text = buf;
 			lv_draw_label(layer, &label_dsc, &txt_area_L);
 
-			lv_area_t txt_area_R = {t_pt_R.x - (SCR_WIDTH / 40.0), t_pt_R.y - (SCR_WIDTH / 80.0),
-						t_pt_R.x + (SCR_WIDTH / 40.0), t_pt_R.y + (SCR_WIDTH / 80.0)};
+			lv_area_t txt_area_R = {t_pt_R.x - (SCR_WIDTH / 40.0),
+						t_pt_R.y - (SCR_WIDTH / 80.0),
+						t_pt_R.x + (SCR_WIDTH / 40.0),
+						t_pt_R.y + (SCR_WIDTH / 80.0)};
 			lv_draw_label(layer, &label_dsc, &txt_area_R);
 		} else {
 			double quart_down = v - 2.5;
 			double quart_up = v + 2.5;
 
-			double q_offset_d = -quart_down * ppu;
-			double q_offset_u = -quart_up * ppu;
+			double q_offset_d = -quart_down * PITCH_PPU;
+			double q_offset_u = -quart_up * PITCH_PPU;
 
 			line_dsc.p1 = (lv_point_precise_t){ROT_X(-(SCR_WIDTH / 40.0), q_offset_d),
 							   ROT_Y(-(SCR_WIDTH / 40.0), q_offset_d)};
@@ -184,7 +194,8 @@ static void draw_chevron(lv_layer_t *layer, int w, int32_t h) {
 	lv_draw_line(layer, &aircraft_dsc);
 	aircraft_dsc.p1 = (lv_point_precise_t){mcx - (SCR_WIDTH / 30.0),
 					       mcy - (aircraft_dsc.width / 2.0)};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx - (SCR_WIDTH / 30.0), mcy + (SCR_HEIGHT / 37.5)};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx - (SCR_WIDTH / 30.0),
+					       mcy + (SCR_HEIGHT / 37.5)};
 	lv_draw_line(layer, &aircraft_dsc);
 
 	aircraft_dsc.p1 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0), mcy};
@@ -192,7 +203,8 @@ static void draw_chevron(lv_layer_t *layer, int w, int32_t h) {
 	lv_draw_line(layer, &aircraft_dsc);
 	aircraft_dsc.p1 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0),
 					       mcy - (aircraft_dsc.width / 2.0)};
-	aircraft_dsc.p2 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0), mcy + (SCR_HEIGHT / 37.5)};
+	aircraft_dsc.p2 = (lv_point_precise_t){mcx + (SCR_WIDTH / 30.0),
+					       mcy + (SCR_HEIGHT / 37.5)};
 	lv_draw_line(layer, &aircraft_dsc);
 
 	aircraft_dsc.p1 = (lv_point_precise_t){mcx, mcy - 2.5};
@@ -289,6 +301,9 @@ static void create_side_tape(lv_layer_t *layer, int x, int y, int tape_loc,
 			text_area.x2 = x + TAPE_WIDTH;
 			text_area.y2 = y_pos + 10;
 		}
+
+		if (tape_loc == TAPE_LOC_LEFT)
+			label_dsc.align = LV_TEXT_ALIGN_RIGHT;
 		label_dsc.text = buf;
 		lv_draw_label(layer, &label_dsc, &text_area);
 	}
@@ -387,7 +402,8 @@ static void create_heading_tape(lv_layer_t *layer, int w, int32_t h, float headi
 		int x_pos = hdg_tape_cx + (int32_t)(delta_v * hdg_px_per_deg);
 
 		hdg_line_dsc.p1 = (lv_point_precise_t){x_pos, hdg_tape_y};
-		hdg_line_dsc.p2 = (lv_point_precise_t){x_pos, hdg_tape_y + (SCR_HEIGHT / 64.0)};
+		hdg_line_dsc.p2 = (lv_point_precise_t){x_pos,
+					hdg_tape_y + (SCR_HEIGHT / 64.0)};
 		lv_draw_line(layer, &hdg_line_dsc);
 
 		if (display_val % 30 == 0) {
@@ -403,8 +419,10 @@ static void create_heading_tape(lv_layer_t *layer, int w, int32_t h, float headi
 			else
 				sprintf(buf, "%d", display_val / 10);
 
-			lv_area_t txt_area = {x_pos - 15, hdg_tape_y + (SCR_HEIGHT / 32.0),
-					      x_pos + 15, hdg_tape_y + (SCR_HEIGHT / 10.0)};
+			lv_area_t txt_area = {x_pos - 15,
+					      hdg_tape_y + (SCR_HEIGHT / 32.0),
+					      x_pos + 15,
+					      hdg_tape_y + (SCR_HEIGHT / 10.0)};
 			hdg_label_dsc.text = buf;
 			lv_draw_label(layer, &hdg_label_dsc, &txt_area);
 		}
@@ -413,8 +431,10 @@ static void create_heading_tape(lv_layer_t *layer, int w, int32_t h, float headi
 
 	hdg_line_dsc.color = lv_color_hex(0xffff00);
 	hdg_line_dsc.width = 3;
-	hdg_line_dsc.p1 = (lv_point_precise_t){hdg_tape_cx, hdg_tape_y - (SCR_HEIGHT / 128.0)};
-	hdg_line_dsc.p2 = (lv_point_precise_t){hdg_tape_cx, hdg_tape_y + (SCR_HEIGHT / 32.0)};
+	hdg_line_dsc.p1 = (lv_point_precise_t){hdg_tape_cx,
+					hdg_tape_y - (SCR_HEIGHT / 128.0)};
+	hdg_line_dsc.p2 = (lv_point_precise_t){hdg_tape_cx,
+					hdg_tape_y + (SCR_HEIGHT / 32.0)};
 	lv_draw_line(layer, &hdg_line_dsc);
 
 	int exact_hdg = (int)heading;
@@ -426,8 +446,10 @@ static void create_heading_tape(lv_layer_t *layer, int w, int32_t h, float headi
 	char buf_exact_hdg[8];
 	sprintf(buf_exact_hdg, "%03d°", exact_hdg);
 
-	lv_area_t ehdg_area = {hdg_tape_cx - (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 12.0),
-			       hdg_tape_cx + (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 200.0)};
+	lv_area_t ehdg_area = {hdg_tape_cx - (SCR_WIDTH / 24.0),
+			       hdg_tape_y - (SCR_HEIGHT / 12.0),
+			       hdg_tape_cx + (SCR_WIDTH / 24.0),
+			       hdg_tape_y - (SCR_HEIGHT / 200.0)};
 
 	lv_draw_rect_dsc_t ehdg_bg_dsc;
 	lv_draw_rect_dsc_init(&ehdg_bg_dsc);
@@ -442,8 +464,10 @@ static void create_heading_tape(lv_layer_t *layer, int w, int32_t h, float headi
 	ehdg_label_dsc.align = LV_TEXT_ALIGN_CENTER;
 	ehdg_label_dsc.font = FONT_TAPE_VAL;
 
-	lv_area_t ehdg_text_area = {hdg_tape_cx - (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 14.0),
-				    hdg_tape_cx + (SCR_WIDTH / 24.0), hdg_tape_y - (SCR_HEIGHT / 200.0)};
+	lv_area_t ehdg_text_area = {hdg_tape_cx - (SCR_WIDTH / 24.0),
+				    hdg_tape_y - (SCR_HEIGHT / 14.0),
+				    hdg_tape_cx + (SCR_WIDTH / 24.0),
+				    hdg_tape_y - (SCR_HEIGHT / 200.0)};
 	ehdg_label_dsc.text = buf_exact_hdg;
 	lv_draw_label(layer, &ehdg_label_dsc, &ehdg_text_area);
 }
@@ -569,7 +593,25 @@ static void print_fma(lv_layer_t *layer, const char *msg1, const char *msg2, con
 	lv_draw_label(layer, &fma_label_dsc, &fma3_area);
 }
 
-int sdl_event_watcher(void *userdata, SDL_Event *event) {
+static void print_msg(lv_layer_t *layer, int x, int y, const char *msg) {
+	lv_draw_rect_dsc_t msgbox_dsc;
+	lv_draw_rect_dsc_init(&msgbox_dsc);
+	msgbox_dsc.bg_color = lv_color_hex(0x313131);
+	msgbox_dsc.bg_opa = LV_OPA_TRANSP;
+
+	lv_area_t msgbox_area = {x, y, x + MSGBOX_WIDTH, y + MSGBOX_HEIGHT};
+	lv_draw_rect(layer, &msgbox_dsc, &msgbox_area);
+
+	lv_draw_label_dsc_t msg_label_dsc;
+	lv_draw_label_dsc_init(&msg_label_dsc);
+	msg_label_dsc.color = lv_color_hex(0xdf5fff);
+	msg_label_dsc.align = LV_TEXT_ALIGN_LEFT;
+	msg_label_dsc.font = FONT_MSG;
+	msg_label_dsc.text = msg;
+	lv_draw_label(layer, &msg_label_dsc, &msgbox_area);
+}
+
+static int sdl_event_watcher(void *userdata, SDL_Event *event) {
 	if (event->type == SDL_MOUSEWHEEL) {
 		if (event->wheel.y > 0) {
 			current_speed += 2.5f;
@@ -588,15 +630,19 @@ static void input_event(lv_event_t *e) {
 
 	switch (key) {
 		case 'w':
-			current_pitch -= 1.0f;
+		case 'W':
+			current_pitch -= 0.1f;
 			break;
 		case 's':
-			current_pitch += 1.0f;
+		case 'S':
+			current_pitch += 0.1f;
 			break;
 		case 'a':
+		case 'A':
 			current_roll += 0.5f;
 			break;
 		case 'd':
+		case 'D':
 			current_roll -= 0.5f;
 			break;
 
@@ -647,26 +693,35 @@ static void pfd_draw(lv_event_t *e) {
 	lv_obj_t *obj = lv_event_get_target(e);
 	lv_layer_t *layer = lv_event_get_layer(e);
 
-	int w = lv_obj_get_width(obj);
-	int h = lv_obj_get_height(obj);
+	int w = SCR_WIDTH;
+	int h = SCR_HEIGHT;
 
 	draw_horizon(layer, w, h, current_pitch, current_roll);
 
-	draw_pitch_ladder(layer, w, h, current_pitch, current_roll,
-			  SCR_HEIGHT / 60.0);
+	draw_pitch_ladder(layer, w, h, current_pitch, current_roll);
 
 	draw_roll_indicator(layer, w, h, current_roll);
 
 	create_heading_tape(layer, w, h, current_heading);
 
 	create_side_tape(layer, 20,
-			 (lv_obj_get_height(obj) - TAPE_HEIGHT) / 2,
+			 (h - TAPE_HEIGHT) / 2,
 			 TAPE_LOC_LEFT, TAPE_INFO_SPEED, 20, 2);
-	create_side_tape(layer, lv_obj_get_width(obj) - TAPE_WIDTH - 20,
-			 (lv_obj_get_height(obj) - TAPE_HEIGHT) / 2,
+	create_side_tape(layer, w - TAPE_WIDTH - 20,
+			 (h - TAPE_HEIGHT) / 2,
 			 TAPE_LOC_RIGHT, TAPE_INFO_ALTITUDE, 100, 0.5);
 
 	print_fma(layer, status_msg1, status_msg2, status_msg3);
+
+	char buf1[16];
+	sprintf(buf1, "ROLL: %.2f°", current_roll);
+	print_msg(layer, 25 + TAPE_WIDTH,
+		  h - (h - TAPE_HEIGHT), buf1);
+
+	char buf2[16];
+	sprintf(buf2, "PITCH: %.2f°", current_pitch);
+	print_msg(layer, 25 + TAPE_WIDTH,
+		  h - (h - TAPE_HEIGHT) + (h / 20.0), buf2);
 
 	draw_chevron(layer, w, h);
 }
@@ -827,13 +882,15 @@ int main() {
 			int32_t dy = mouse_y - cy;
 
 			float max_roll = 45.0f;
-			float max_pitch = 60.0f;
+			float max_pitch = 30.0f;
 
 			current_roll = -((float)dx / (float)cx) * max_roll;
-			current_pitch = ((float)dy / 200.0) * max_pitch;
+			current_pitch = ((float)dy / (float)cy) * max_pitch;
 
 			if (current_roll < -45.0f) current_roll = -45.0f;
 			if (current_roll > 45.0f) current_roll = 45.0f;
+			if (current_pitch < -30.0f) current_pitch = -30.0f;
+			if (current_pitch > 30.0f) current_pitch = 30.0f;
 		}
 
 		lv_obj_invalidate(screen);
