@@ -6,7 +6,7 @@
 #include <lvgl/font/lv_text.h>
 #include <stdio.h>
 
-#if (SCR_HEIGHT >= 500)
+#if (SCR_HEIGHT >= 200)
 	#define FLT_DIR
 #endif
 
@@ -16,11 +16,11 @@ static double current_acceleration = 0.0f;
 static double current_speed = 0.0f;
 static double current_altitude = 0.0f;
 static double current_heading = 0.0f;
-static int current_status = 0;
+static int current_status = 1;
 
 static char *status_msg1 = "FMC SPD";
 static char *status_msg2 = "LNAV";
-static char *status_msg3 = "PARK";
+static char *status_msg3 = "TAXI";
 
 static void draw_horizon(lv_layer_t *layer, int w, int32_t h, float pitch, float roll) {
 	int cx = w / 2;
@@ -490,8 +490,17 @@ static void draw_roll_indicator(lv_layer_t *layer, int w, int32_t h, float roll)
 	lv_draw_arc(layer, &arc_dsc);
 
 #ifdef FLT_DIR
-	lv_area_t fltdir_area = {cx - 90, cy - (r + 60),
-				 cx + 90, cy - (r + 15)};
+	int fltdir_padding;
+	if (SCR_WIDTH >= 1000) {
+		fltdir_padding = 40;
+	} else if (SCR_WIDTH >= 500) {
+		fltdir_padding = 20;
+	} else {
+		fltdir_padding = 13;
+	}
+
+	lv_area_t fltdir_area = {cx - 90, cy - (r + (SCR_HEIGHT / 40.0) + fltdir_padding),
+				 cx + 90, cy - (r + (SCR_HEIGHT / 40.0))};
 	lv_draw_label_dsc_t fltdir_label_dsc;
 	lv_draw_label_dsc_init(&fltdir_label_dsc);
 	fltdir_label_dsc.color = lv_color_hex(0x00ff00);
@@ -519,13 +528,15 @@ static void draw_roll_indicator(lv_layer_t *layer, int w, int32_t h, float roll)
 			tri_dsc.color = lv_color_hex(0xffffff);
 			tri_dsc.opa = LV_OPA_COVER;
 
-			tri_dsc.p[0] = (lv_point_precise_t){cx - 12, cy - (r + 15)};
-			tri_dsc.p[1] = (lv_point_precise_t){cx + 12, cy - (r + 15)};
+			tri_dsc.p[0] = (lv_point_precise_t){cx - (SCR_WIDTH / 100.0),
+						cy - (r + (SCR_HEIGHT / 40.0))};
+			tri_dsc.p[1] = (lv_point_precise_t){cx + (SCR_WIDTH / 100.0),
+						cy - (r + (SCR_HEIGHT / 40.0))};
 			tri_dsc.p[2] = (lv_point_precise_t){cx, cy - r};
 			lv_draw_triangle(layer, &tri_dsc);
 		} else {
-			int r_out = r + 15;
-			if (abs(a) == 45) r_out = r + 10;
+			int r_out = r + (SCR_WIDTH >= 1000 ? 15 : 8);
+			if (abs(a) == 45) r_out = r + (SCR_WIDTH >= 1000 ? 10 : 6);
 
 			line_dsc.p1 = (lv_point_precise_t){cx + r * cos(rad),
 							   cy + r * sin(rad)};
@@ -539,9 +550,14 @@ static void draw_roll_indicator(lv_layer_t *layer, int w, int32_t h, float roll)
 	double cos_r = cos(r_rad);
 	double sin_r = sin(r_rad);
 
+	int vdiff = SCR_WIDTH >= 1000 ? 25 : 12;
+	int hdiff = SCR_WIDTH >= 1000 ? 20 : 10;
+
 	lv_point_precise_t pt_tip = {ROT_X(0, -r), ROT_Y(0, -r)};
-	lv_point_precise_t pt_bl = {ROT_X(-20, -r + 25), ROT_Y(-20, -r + 25)};
-	lv_point_precise_t pt_br = {ROT_X(20, -r + 25), ROT_Y(20, -r + 25)};
+	lv_point_precise_t pt_bl = {ROT_X(-hdiff, -r + vdiff),
+				    ROT_Y(-hdiff, -r + vdiff)};
+	lv_point_precise_t pt_br = {ROT_X(hdiff, -r + vdiff),
+				    ROT_Y(hdiff, -r + vdiff)};
 
 	lv_draw_line_dsc_t ptr_dsc;
 	lv_draw_line_dsc_init(&ptr_dsc);
@@ -639,11 +655,13 @@ static void input_event(lv_event_t *e) {
 			break;
 		case 'a':
 		case 'A':
-			current_roll += 0.5f;
+			if (current_speed != 0)
+				current_roll += 0.5f;
 			break;
 		case 'd':
 		case 'D':
-			current_roll -= 0.5f;
+			if (current_speed != 0)
+				current_roll -= 0.5f;
 			break;
 
 		case LV_KEY_UP:

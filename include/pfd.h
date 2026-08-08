@@ -99,7 +99,7 @@ static lv_font_t *font_b612_mono_bold_38 = NULL;
 #define FONT_HDG ((SCR_WIDTH >= 1000) ? font_b612_mono_16 : font_b612_mono_10)
 #define FONT_FMA ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_32 : font_b612_mono_bold_16)
 #define FONT_MSG ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_30 : font_b612_mono_bold_14)
-#define FONT_FLTDIR ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_38 : font_b612_mono_bold_18)
+#define FONT_FLTDIR ((SCR_WIDTH >= 1000) ? font_b612_mono_bold_38 : ((SCR_WIDTH >= 500) ? font_b612_mono_bold_18 : font_b612_mono_bold_12))
 
 /* colors */
 #if PFD_BG_NIGHT_MODE == 0
