@@ -1,9 +1,4 @@
 #include "include/pfd.h"
-#include <lvgl/core/lv_area.h>
-#include <lvgl/draw/lv_color.h>
-#include <lvgl/draw/lv_draw_label.h>
-#include <lvgl/draw/lv_draw_rect.h>
-#include <lvgl/font/lv_text.h>
 #include <stdio.h>
 
 #if (SCR_HEIGHT >= 200)
@@ -17,10 +12,12 @@ static double current_speed = 0.0f;
 static double current_altitude = 0.0f;
 static double current_heading = 0.0f;
 static int current_status = 1;
+static int fltdir_enabled = 1;
 
 static char *status_msg1 = "FMC SPD";
 static char *status_msg2 = "LNAV";
 static char *status_msg3 = "TAXI";
+
 
 static void draw_horizon(lv_layer_t *layer, int w, int32_t h, float pitch, float roll) {
 	int cx = w / 2;
@@ -505,7 +502,7 @@ static void draw_roll_indicator(lv_layer_t *layer, int w, int32_t h, float roll)
 	lv_draw_label_dsc_init(&fltdir_label_dsc);
 	fltdir_label_dsc.color = lv_color_hex(0x00ff00);
 	fltdir_label_dsc.align = LV_TEXT_ALIGN_CENTER;
-	fltdir_label_dsc.text = "FLT DIR";
+	fltdir_label_dsc.text = (fltdir_enabled ? "FLT DIR" : "");
 	fltdir_label_dsc.font = FONT_FLTDIR;
 	lv_draw_label(layer, &fltdir_label_dsc, &fltdir_area);
 #endif
@@ -662,6 +659,14 @@ static void input_event(lv_event_t *e) {
 		case 'D':
 			if (current_speed != 0)
 				current_roll -= 0.5f;
+			break;
+
+		case 'f':
+		case 'F':
+			if (fltdir_enabled)
+				fltdir_enabled = 0;
+			else
+				fltdir_enabled = 1;
 			break;
 
 		case LV_KEY_UP:
